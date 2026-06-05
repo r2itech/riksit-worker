@@ -1,40 +1,119 @@
-/**
- * Welcome to Cloudflare Workers!
- *
- * This is a template for a Scheduled Worker: a Worker that can run on a
- * configurable interval:
- * https://developers.cloudflare.com/workers/platform/triggers/cron-triggers/
- *
- * - Run `npm run dev` in your terminal to start a development server
- * - Run `curl "http://localhost:8787/__scheduled?cron=*+*+*+*+*"` to see your Worker in action
- * - Run `npm run deploy` to publish your Worker
- *
- * Bind resources to your Worker in `wrangler.jsonc`. After adding bindings, a type definition for the
- * `Env` object can be regenerated with `npm run cf-typegen`.
- *
- * Learn more at https://developers.cloudflare.com/workers/
- */
+import { analyzeArticles } from "./lib/groq";
+import { insertReport, insertSpottedInfo, isDuplicate } from "./lib/supabase";
+import type { Env, RawArticle } from "./lib/types";
+import { fetchGDACS } from "./sources/gdacs";
+import { fetchGoogleNews } from "./sources/google-news";
+
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+const SPOTTED_TTL_MS = 6 * 60 * 60 * 1000;
+
+function dedupeByUrl(articles: RawArticle[]): RawArticle[] {
+	const seen = new Set<string>();
+	const out: RawArticle[] = [];
+	for (const a of articles) {
+		const key = a.url || `${a.source}:${a.title}`;
+		if (seen.has(key)) continue;
+		seen.add(key);
+		out.push(a);
+	}
+	return out;
+}
+
+function isRecent(article: RawArticle, now: number): boolean {
+	if (!article.publishedAt) return true;
+	const t = Date.parse(article.publishedAt);
+	if (!Number.isFinite(t)) return true;
+	return now - t <= ONE_DAY_MS;
+}
+
+async function settled<T>(p: Promise<T[]>): Promise<T[]> {
+	try {
+		return await p;
+	} catch (e) {
+		console.warn("[scheduled] source failed", e);
+		return [];
+	}
+}
 
 export default {
 	async fetch(req) {
 		const url = new URL(req.url);
-		url.pathname = '/__scheduled';
-		url.searchParams.append('cron', '* * * * *');
-		return new Response(`To test the scheduled handler, ensure you have used the "--test-scheduled" then try running "curl ${url.href}".`);
+		url.pathname = "/__scheduled";
+		url.searchParams.append("cron", "* * * * *");
+		return new Response(
+			`To test the scheduled handler, ensure you have used the "--test-scheduled" then try running "curl ${url.href}".`,
+		);
 	},
 
-	// The scheduled handler is invoked at the interval set in our wrangler.jsonc's
-	// [[triggers]] configuration.
-	async scheduled(event, env, ctx): Promise<void> {
-		// A Cron Trigger can make requests to other endpoints on the Internet,
-		// publish to a Queue, query a D1 Database, and much more.
-		//
-		// We'll keep it simple and make an API call to a Cloudflare API:
-		let resp = await fetch('https://api.cloudflare.com/client/v4/ips');
-		let wasSuccessful = resp.ok ? 'success' : 'fail';
+	async scheduled(event, env, _ctx): Promise<void> {
+		try {
+			const [gn, gd] = await Promise.all([
+				settled(fetchGoogleNews()),
+				settled(fetchGDACS()),
+			]);
 
-		// You could store this result in KV, write to a D1 Database, or publish to a Queue.
-		// In this template, we'll just log the result:
-		console.log(`trigger fired at ${event.cron}: ${wasSuccessful}`);
+			const all = dedupeByUrl([...gn, ...gd]);
+			const now = Date.now();
+			const recent = all.filter((a) => isRecent(a, now));
+
+			console.log(
+				`[scheduled] fetched=${all.length} recent=${recent.length} ` +
+					`(google-news=${gn.length}, gdacs=${gd.length})`,
+			);
+
+			if (!recent.length) {
+				console.log(`[scheduled] no recent articles to analyze (cron=${event.cron})`);
+				return;
+			}
+
+			const analyzed = await analyzeArticles(env, recent);
+			const environmental = analyzed.filter((r) => r.isEnvironmental && r.message);
+			console.log(`[scheduled] analyzed=${analyzed.length} environmental=${environmental.length}`);
+
+			let insertedReports = 0;
+			let insertedSpotted = 0;
+			let skippedDupes = 0;
+
+			for (const r of environmental) {
+				const sourceUrl = r.sourceUrl;
+				if (sourceUrl && (await isDuplicate(env, sourceUrl))) {
+					skippedDupes++;
+					continue;
+				}
+				const okReport = await insertReport(env, {
+					message: r.message,
+					provinceName: r.provinceName,
+					regencyName: r.regencyName,
+					districtName: r.districtName,
+					villageName: r.villageName,
+					sourceUrl,
+				});
+				if (okReport) insertedReports++;
+
+				if (okReport && r.severity === "high" && sourceUrl) {
+					const expiresAt = new Date(Date.now() + SPOTTED_TTL_MS).toISOString();
+					const okSpotted = await insertSpottedInfo(env, {
+						title: r.message.slice(0, 140),
+						description: r.message,
+						severity: r.severity,
+						provinceName: r.provinceName,
+						regencyName: r.regencyName,
+						districtName: r.districtName,
+						villageName: r.villageName,
+						sourceUrl,
+						expiresAt,
+					});
+					if (okSpotted) insertedSpotted++;
+				}
+			}
+
+			console.log(
+				`[scheduled] done cron=${event.cron} ` +
+					`reports_inserted=${insertedReports} spotted_inserted=${insertedSpotted} ` +
+					`duplicates_skipped=${skippedDupes}`,
+			);
+		} catch (e) {
+			console.error("[scheduled] unhandled error", e);
+		}
 	},
 } satisfies ExportedHandler<Env>;
