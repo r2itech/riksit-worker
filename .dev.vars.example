@@ -1,0 +1,16 @@
+# Copy this file to `.dev.vars` and fill in real values.
+# `.dev.vars` is gitignored — never commit it.
+# Production secrets are set separately via `npx wrangler secret put <NAME>`.
+
+# Groq API key (https://console.groq.com/keys). Starts with "gsk_".
+GROQ_API_KEY=
+
+# Supabase REST base URL, with trailing slash. Example:
+# https://your-project-ref.supabase.co/rest/v1/
+SUPABASE_URL=
+
+# Supabase anon key (Project Settings → API). JWT, starts with "eyJ".
+SUPABASE_ANON_KEY=
+
+# "development" locally, "production" in Cloudflare.
+ENVIRONMENT=development

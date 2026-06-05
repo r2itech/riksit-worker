@@ -40,8 +40,14 @@ npx tsc --noEmit                                         # type check
 npm run deploy                                           # deploy to Cloudflare
 ```
 
-Local secrets go in `.dev.vars` (gitignored). Production secrets live in
-Cloudflare Workers secrets — never commit keys.
+Local secrets go in `.dev.vars` (gitignored). Copy the template and fill it
+in once:
+
+```bash
+cp .dev.vars.example .dev.vars
+```
+
+Production secrets live in Cloudflare Workers secrets — never commit keys.
 
 | Variable            | Description                       |
 | ------------------- | --------------------------------- |
