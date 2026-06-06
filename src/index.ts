@@ -2,7 +2,7 @@ import { analyzeArticles } from "./lib/groq";
 import { insertReport, insertSpottedInfo, isDuplicate } from "./lib/supabase";
 import type { Env, RawArticle } from "./lib/types";
 import { fetchGDACS } from "./sources/gdacs";
-import { fetchGoogleNews } from "./sources/google-news";
+import { fetchIndonesiaNews } from "./sources/indonesia-news";
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const SPOTTED_TTL_MS = 6 * 60 * 60 * 1000;
@@ -48,7 +48,7 @@ export default {
 	async scheduled(event, env, _ctx): Promise<void> {
 		try {
 			const [gn, gd] = await Promise.all([
-				settled(fetchGoogleNews()),
+				settled(fetchIndonesiaNews()),
 				settled(fetchGDACS()),
 			]);
 
@@ -58,7 +58,7 @@ export default {
 
 			console.log(
 				`[scheduled] fetched=${all.length} recent=${recent.length} ` +
-					`(google-news=${gn.length}, gdacs=${gd.length})`,
+					`(indonesia-news=${gn.length}, gdacs=${gd.length})`,
 			);
 
 			if (!recent.length) {
