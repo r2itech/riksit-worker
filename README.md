@@ -11,7 +11,8 @@ App repo: [r2itech/riksit](https://github.com/r2itech/riksit).
 
 ```
 cron (*/30 * * * *)
-  ├── fetch Google News RSS (Indonesia, environmental keywords)
+  ├── fetch Indonesian news RSS (Antara, Mongabay, CNN Indonesia,
+  │     Liputan6, Tirto, Republika — in parallel)
   └── fetch GDACS RSS (global disaster alerts)
         │
         ▼
@@ -94,7 +95,8 @@ Bundle stays under the 1 MB Worker limit by calling Groq and Supabase via
 src/
   index.ts              cron + fetch handlers
   sources/
-    google-news.ts      Google News RSS by keyword
+    indonesia-news.ts   Indonesian news RSS (Antara, Mongabay, CNN
+                        Indonesia, Liputan6, Tirto, Republika)
     gdacs.ts            GDACS global disaster RSS
   lib/
     groq.ts             Groq client + analysis prompt
