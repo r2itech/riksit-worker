@@ -11,6 +11,15 @@ const FEEDS: string[] = [
 
 const MAX_ARTICLES = 30;
 
+const BROWSER_HEADERS: Record<string, string> = {
+	"User-Agent":
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+	Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+	"Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8",
+	"Accept-Encoding": "gzip, deflate, br",
+	"Cache-Control": "no-cache",
+};
+
 function tsOf(article: RawArticle): number {
 	const t = Date.parse(article.publishedAt);
 	return Number.isFinite(t) ? t : 0;
@@ -21,9 +30,7 @@ export async function fetchGoogleNews(): Promise<RawArticle[]> {
 	const seen = new Set<string>();
 	for (const url of FEEDS) {
 		try {
-			const res = await fetch(url, {
-				headers: { "User-Agent": "Mozilla/5.0 RiksitWorker/1.0" },
-			});
+			const res = await fetch(url, { headers: BROWSER_HEADERS });
 			if (!res.ok) {
 				console.warn(`[google-news] ${res.status} for ${url}`);
 				continue;
