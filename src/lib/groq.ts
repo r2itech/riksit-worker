@@ -1,7 +1,7 @@
 import type { AnalyzedReport, Env, RawArticle, Severity } from './types';
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'] as const;
+const MODELS = ['llama-3.3-70b-versatile', 'openai/gpt-oss-20b'] as const;
 const MAX_RETRIES = 2;
 const BATCH_SIZE = 5;
 const MAX_TITLE_LEN = 100;
